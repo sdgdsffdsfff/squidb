@@ -6,9 +6,6 @@
 package com.yahoo.squidb.data;
 
 import com.yahoo.squidb.Beta;
-import com.yahoo.squidb.data.adapter.SQLExceptionWrapper;
-import com.yahoo.squidb.data.adapter.SQLiteOpenHelperWrapper;
-import com.yahoo.squidb.data.adapter.SquidTransactionListener;
 import com.yahoo.squidb.sql.CompiledStatement;
 import com.yahoo.squidb.sql.Criterion;
 import com.yahoo.squidb.sql.Delete;
@@ -203,7 +200,7 @@ public abstract class SquidDatabase {
     /**
      * SQLiteOpenHelperWrapper that takes care of database operations
      */
-    private final SQLiteOpenHelperWrapper helper;
+    private SQLiteOpenHelperWrapper helper = null;
 
     /**
      * Internal pointer to open database. Hides the fact that there is a database and a wrapper by making a single
@@ -219,20 +216,15 @@ public abstract class SquidDatabase {
     /**
      * Map of class objects to corresponding tables
      */
-    private Map<Class<? extends AbstractModel>, SqlTable<?>> tableMap;
+    private Map<Class<? extends AbstractModel>, SqlTable<?>> tableMap
+            = new HashMap<Class<? extends AbstractModel>, SqlTable<?>>();
 
     private boolean isInMigration;
 
     /**
      * Create a new SquidDatabase
      */
-    public SquidDatabase(SQLiteOpenHelperWrapper openHelper) {
-        this.helper = openHelper;
-        initializeTableMap();
-    }
-
-    private void initializeTableMap() {
-        tableMap = new HashMap<Class<? extends AbstractModel>, SqlTable<?>>();
+    public SquidDatabase() {
         registerTableModels(getTables());
         registerTableModels(getViews());
     }
@@ -247,11 +239,21 @@ public abstract class SquidDatabase {
         }
     }
 
+    private synchronized SQLiteOpenHelperWrapper getOpenHelper() {
+        if (helper == null) {
+            helper = createOpenHelper(getName(), new OpenHelperDelegate(), getVersion());
+        }
+        return helper;
+    }
+
+    protected abstract SQLiteOpenHelperWrapper createOpenHelper(String databaseName,
+            OpenHelperDelegate delegate, int version);
+
     /**
      * @return the path to the underlying database file.
      */
     public String getDatabasePath() {
-        return helper.getDatabasePath(getName());
+        return getOpenHelper().getDatabasePath(getName());
     }
 
     /**
@@ -409,7 +411,7 @@ public abstract class SquidDatabase {
     private void openForWriting() {
         boolean performRecreate = false;
         try {
-            setDatabase(helper.openForWriting());
+            setDatabase(getOpenHelper().openForWriting());
         } catch (RecreateDuringMigrationException recreate) {
             performRecreate = true;
         } catch (MigrationFailedException fail) {
@@ -439,7 +441,7 @@ public abstract class SquidDatabase {
         if (isOpen()) {
             database.close();
         }
-        helper.close();
+        getOpenHelper().close();
         setDatabase(null);
     }
 
@@ -451,7 +453,7 @@ public abstract class SquidDatabase {
      */
     public synchronized final void clear() {
         close();
-        helper.deleteDatabase(getName());
+        getOpenHelper().deleteDatabase(getName());
     }
 
     /**
@@ -1028,7 +1030,7 @@ public abstract class SquidDatabase {
      * Execute a raw SQL statement
      *
      * @param sql the statement to execute
-     * @throws SQLExceptionWrapper if there is an error parsing the SQL or some other error
+     * @throws SQLException if there is an error parsing the SQL or some other error
      * @see ISQLiteDatabase#execSQL(String)
      */
     public void execSqlOrThrow(String sql) throws SQLExceptionWrapper {
@@ -1068,7 +1070,7 @@ public abstract class SquidDatabase {
      *
      * @param sql the statement to execute
      * @param bindArgs the arguments to bind to the statement
-     * @throws SQLExceptionWrapper if there is an error parsing the SQL or some other error
+     * @throws SQLException if there is an error parsing the SQL or some other error
      * @see ISQLiteDatabase#execSQL(String, Object[])
      */
     public void execSqlOrThrow(String sql, Object[] bindArgs) throws SQLExceptionWrapper {
