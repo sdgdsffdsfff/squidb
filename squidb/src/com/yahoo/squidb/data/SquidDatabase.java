@@ -253,7 +253,7 @@ public abstract class SquidDatabase {
      * @return the path to the underlying database file.
      */
     public String getDatabasePath() {
-        return getOpenHelper().getDatabasePath(getName());
+        return getOpenHelper().getDatabasePath();
     }
 
     /**
@@ -453,7 +453,7 @@ public abstract class SquidDatabase {
      */
     public synchronized final void clear() {
         close();
-        getOpenHelper().deleteDatabase(getName());
+        getOpenHelper().deleteDatabase();
     }
 
     /**
